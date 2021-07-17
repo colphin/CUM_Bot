@@ -1,19 +1,21 @@
 import discord
+from discord.ext import commands
 import os
 import RedditRelay
 from decouple import config
 import datetime
 import atexit
+import time
 
 # Create client object
 client = discord.Client()
 
 # Get Token from enviroment
 token = config('DISCORD_TOKEN')
+admin = config('DISCORD_ADMIN_ID')
 
 # Create reddit relay
 redditRelay = RedditRelay.RedditRelay()
-
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
 
@@ -21,15 +23,17 @@ client = discord.Client(intents=intents)
 coolDownDictionary = {}
 
 def isUserOnCoolDown(user):
-    if coolDownDictionary[user] == None:
+    coolDownPeriod = datetime.timedelta(minutes=3)
+
+    if coolDownDictionary[user] == None or str(user.id) == str(admin):
         coolDownDictionary[user] = datetime.datetime.now()
         return 0
     delta = datetime.datetime.now() - coolDownDictionary[user]
-    if delta > datetime.timedelta(minutes=3):
+    if delta > coolDownPeriod:
         coolDownDictionary[user] = datetime.datetime.now()
         return 0
     else:
-        return int(delta.total_seconds())
+        return int(coolDownPeriod.total_seconds()) - int(delta.total_seconds())
 
 @client.event
 async def on_ready():
@@ -46,24 +50,16 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    # ignore if user is bot itself
     if message.author == client.user:
         return
-
-    if message.content.startswith('$repeat'):
-        messageArray = message.content.split(' ')
-        messageCount = len(messageArray)
-
-        if (messageCount == 1):
-            await message.channel.send("Repeat what?")
-        else:
-            await message.channel.send(' '.join(messageArray[1:]))
     
+    # meme content kekw
     if message.content.startswith('$meme'):
-        
         cooldownTimer = isUserOnCoolDown(message.author)
         if cooldownTimer > 0:
-                await message.channel.send("You are on cool down dumbass: " + str(cooldownTimer))
-                return 
+            await message.channel.send("You are on cool down dumbass: " + str(cooldownTimer) + " seconds left")
+            return 
 
         messageArray = message.content.split(' ')
         messageCount = len(messageArray)
@@ -77,19 +73,22 @@ async def on_message(message):
         try:
             result = await redditRelay.getMeme(topic)
             if (result['code'] == 200):
-                await message.channel.send(result['url'])
+                await message.channel.send(str(message.author.name) + "\n" + result['url'])
             else:
-                await message.channel.send('Shits broken yo.')
+                raise Exception("Fuck if i know")
         except Exception as e:
             print(e)
             await message.channel.send('Shits broken yo.')
 
+    # actual fucking porn
     if message.content.startswith('$porn'):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         await message.channel.send(file=discord.File('images/Chris.jpg'))
 
+    if message.content.startswith('$tts'):
+        ctx = message.member.voice.channel
+        print(ctx)
 
-os.listdir()
 
 print("Bot Started")
 client.run(token)
